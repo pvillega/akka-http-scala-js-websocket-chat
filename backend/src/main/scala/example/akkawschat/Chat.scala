@@ -3,11 +3,13 @@ package example.akkawschat
 import akka.actor._
 import akka.stream.OverflowStrategy
 import akka.stream.scaladsl._
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
-case class ChatMessage(sender: String, message: String)
+case class ChatMessage(sender: String, message: Future[String])
 
 trait Chat {
-  def chatFlow(sender: String): Flow[String, ChatMessage, Unit]
+  def chatFlow(sender: String): Flow[Future[String], ChatMessage, Unit]
 
   def injectMessage(message: ChatMessage): Unit
 }
@@ -30,7 +32,7 @@ object Chat {
           case ParticipantLeft(person) ⇒ sendAdminMessage(s"$person left!")
           case Terminated(sub)         ⇒ subscribers -= sub // clean up dead subscribers
         }
-        def sendAdminMessage(msg: String): Unit = dispatch(ChatMessage("admin", msg))
+        def sendAdminMessage(msg: String): Unit = dispatch(ChatMessage("admin", Future(msg)))
         def dispatch(msg: ChatMessage): Unit = subscribers.foreach(_ ! msg)
       }))
 
@@ -46,11 +48,11 @@ object Chat {
     val chatOutSource = Source.actorRef[ChatMessage](1, OverflowStrategy.fail)
 
     new Chat {
-      def chatFlow(sender: String): Flow[String, ChatMessage, Unit] =
+      def chatFlow(sender: String): Flow[Future[String], ChatMessage, Unit] =
         Flow(chatInSink(sender), chatOutSource)(Keep.right) { implicit b ⇒
           (chatActorIn, chatActorOut) ⇒
             import akka.stream.scaladsl.FlowGraph.Implicits._
-            val enveloper = b.add(Flow[String].map(ReceivedMessage(sender, _))) // put the message in an envelope
+            val enveloper = b.add(Flow[Future[String]].map(ReceivedMessage(sender, _))) // put the message in an envelope
             val merge = b.add(Merge[ChatEvent](2))
 
             // the main flow
@@ -63,8 +65,10 @@ object Chat {
             // send the output of the merge to the chatActor
             merge ~> chatActorIn
 
+            // this tuple defines the [Future[String], ChatMessage] types in the resulting Flow[X,Y,Z]
             (enveloper.inlet, chatActorOut.outlet)
         }.mapMaterialized(_ ⇒ ())
+
       def injectMessage(message: ChatMessage): Unit = chatActor ! message // non-streams interface
     }
   }
@@ -72,7 +76,7 @@ object Chat {
   private sealed trait ChatEvent
   private case class NewParticipant(name: String, subscriber: ActorRef) extends ChatEvent
   private case class ParticipantLeft(name: String) extends ChatEvent
-  private case class ReceivedMessage(sender: String, message: String) extends ChatEvent {
+  private case class ReceivedMessage(sender: String, message: Future[String]) extends ChatEvent {
     def toChatMessage: ChatMessage = ChatMessage(sender, message)
   }
 }

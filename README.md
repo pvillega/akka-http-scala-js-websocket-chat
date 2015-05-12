@@ -1,5 +1,18 @@
 # Akka HTTP / Scala.js / Websocket Chat App
 
+This is a fork of [this project](https://github.com/pvillega/akka-http-scala-js-websocket-chat)
+
+The aim is to experiment with it and learn a bit more about Akka HTTP and Scala.js playing around with the code.
+
+Plugins used by the original project:
+
+* Scalariform: code formatter
+* SBT-revolver: enables autoreload of source code 
+* SBT-assembly: creates a fat JAR for deployment of the app
+* SCalaJS: ScalaJs integration, used in Front End project
+
+# Original README below
+
 A simple chat app that uses akka-http backend and a scala.js frontend to implement a simple
 websocket based chat application.
 
